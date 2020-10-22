@@ -19,45 +19,39 @@ class RepeatWorkBreak(rumps.App):
             'shift_setting_buttons': [
                 {
                     'title': '1 hour',
-                    'duration': 60,
                 },
                 {
                     'title': '4 hour',
-                    'duration': 240,
                 },
                 {
                     'title': '8 hour',
-                    'duration': 480,
                 }
             ],
             'break_setting_buttons': [
                 {
                     'title': '5 minutes',
-                    'duration': 60,
                 },
                 {
                     'title': '10 minutes',
-                    'duration': 240,
                 },
                 {
                     'title': '15 minutes',
-                    'duration': 480,
                 }
             ],
         }
         self.app = rumps.App(self.config['app_title'])
-        self.totalShiftCount = 8
-        self.progressBox = '◻︎' * self.totalShiftCount
+        self.timer = rumps.Timer(self.on_tick, 1)
+
         self.shift_setting_button = None
         self.break_setting_button = None
-        self.timer = rumps.Timer(self.on_tick, 1)
         self.shift_time_in_seconds = self.config["shift_time_in_seconds"]
         self.break_time_in_seconds = self.config["break_time_in_seconds"]
+        self.elapsed_shift_time_in_hours = 0
+        self.progressBox = '◻︎' * (self.shift_time_in_seconds // 3600)
         self.start_pause_button = rumps.MenuItem(
             title=self.config["start"], callback=self.start_timer)
         self.stop_button = rumps.MenuItem(
             title=self.config["stop"], callback=None)
-        self.elapsedShiftCount = 0
         self.app.menu = [
             {
                 'Preferences':
@@ -89,7 +83,7 @@ class RepeatWorkBreak(rumps.App):
         time_left_in_string = self.convert_seconds_to_time_string(
             time_left_in_seconds)
         if sender.count != 0 and sender.count % (360) == 0:
-            self.elapsedShiftCount += 1
+            self.elapsed_shift_time_in_hours += 1
             self.updateProgressBox()
 
         if time_left_in_seconds == 0:
@@ -104,8 +98,9 @@ class RepeatWorkBreak(rumps.App):
             sender.count += 1
 
     def updateProgressBox(self):
-        self.progressBox = self.elapsedShiftCount * '☑︎' + \
-            (self.totalShiftCount - self.elapsedShiftCount) * '◻︎'
+        self.progressBox = self.elapsed_shift_time_in_hours * '☑︎' + \
+            (self.shift_time_in_seconds // 3600 -
+             self.elapsed_shift_time_in_hours) * '◻︎'
 
     def start_timer(self, sender):
         if sender.title.lower().startswith(("start", "continue")):
@@ -118,7 +113,7 @@ class RepeatWorkBreak(rumps.App):
             sender.title = self.config["continue"]
             self.timer.stop()
 
-    def stop_timer(self, _):
+    def stop_timer(self, sender=None):
         self.set_up_menu()
         self.stop_button.set_callback(None)
         self.start_pause_button.title = self.config["start"]
