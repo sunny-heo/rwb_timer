@@ -5,8 +5,15 @@ import rumps
 class RepeatWorkBreak(rumps.App):
     def __init__(self):
         rumps.debug_mode(True)
-        self.app = rumps.App("Repeat Work and Break")
+
         self.config = {
+            "app_title": "Repeat Work and Break",
+            "start": "Start",
+            "pause": "Pause Timer",
+            "continue": "Continue Timer",
+            "stop": "Stop Timer",
+            "timeout_message": "Time is up! Take a break :)",
+            "interval": 60 * 60 * 5,  # 60 seconds * 60 = 1 hour
             'shiftSettingButtons': [
                 {
                     'title': '1 hour',
@@ -36,8 +43,18 @@ class RepeatWorkBreak(rumps.App):
                 }
             ],
         }
+        self.app = rumps.App(self.config['app_title'])
+        self.totalShiftCount = 8
+        self.progressBox = '◻︎' * self.totalShiftCount
         self.shiftSettingButton = None
         self.breakSettingButton = None
+        self.timer = rumps.Timer(self.on_tick, 1)
+        self.interval = self.config["interval"]
+        self.start_pause_button = rumps.MenuItem(
+            title=self.config["start"], callback=self.start_timer)
+        self.stop_button = rumps.MenuItem(
+            title=self.config["stop"], callback=None)
+        self.elapsedShiftCount = 0
         self.app.menu = [
             {
                 'Preferences':
@@ -47,9 +64,61 @@ class RepeatWorkBreak(rumps.App):
                 }
             },
             None,
-            "Silly button",
-            "Say hi",
+            self.start_pause_button,
+            self.stop_button,
         ]
+
+    def set_up_menu(self):
+        self.timer.stop()
+        self.timer.count = 0
+        self.app.title = self.config['appTitle']
+
+    def convert(self, seconds):
+        seconds = seconds % (24 * 3600)
+        hour = seconds // 3600
+        seconds %= 3600
+        minutes = seconds // 60
+        seconds %= 60
+        return "%d:%02d:%02d" % (hour, minutes, seconds)
+
+    def on_tick(self, sender):
+        time_left_in_seconds = sender.end - sender.count
+
+        time_left_in_string = self.convert(time_left_in_seconds)
+        if sender.count != 0 and sender.count % (360) == 0:
+            self.elapsedShiftCount += 1
+            self.updateProgressBox()
+
+        if time_left_in_seconds == 0:
+            rumps.notification(
+                title=self.config["app_title"], subtitle=self.config["timeout_message"], message='')
+            self.stop_timer()
+            self.stop_button.set_callback(None)
+        else:
+            self.stop_button.set_callback(self.stop_timer)
+
+            self.app.title = self.progressBox + ' |  ' + time_left_in_string
+            sender.count += 1
+
+    def updateProgressBox(self):
+        self.progressBox = self.elapsedShiftCount * '☑︎' + \
+            (self.totalShiftCount - self.elapsedShiftCount) * '◻︎'
+
+    def start_timer(self, sender):
+        if sender.title.lower().startswith(("start", "continue")):
+            if sender.title == self.config["start"]:
+                self.timer.count = 0
+                self.timer.end = self.interval
+            sender.title = self.config["pause"]
+            self.timer.start()
+        else:
+            sender.title = self.config["continue"]
+            self.timer.stop()
+
+    def stop_timer(self):
+        self.set_up_menu()
+        self.stop_button.set_callback(None)
+        self.start_pause_button.title = self.config["start"]
 
     def __initializeShiftSettingButtons(self) -> List[rumps.MenuItem]:
         shiftSettingButtons = [rumps.MenuItem(shiftSettingButton['title'], callback=self.toggleShiftSettingButton)
@@ -80,12 +149,6 @@ class RepeatWorkBreak(rumps.App):
         self.breakSettingButton.state = not self.breakSettingButton.state
         self.breakSettingButton = sender
         self.breakSettingButton.state = not self.breakSettingButton.state
-
-    def prefs(self):
-        self.window = rumps.Window(
-            title="Please select your shift", dimensions=(320, 20))
-        self.window.add_buttons(["8 hours", "4 hours",  "1 hour"])
-        print(self.window.run())
 
     def run(self):
         self.app.run()
