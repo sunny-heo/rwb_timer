@@ -118,7 +118,7 @@ class RepeatWorkBreak(rumps.App):
             sender.title = self.config["continue"]
             self.timer.stop()
 
-    def stop_timer(self):
+    def stop_timer(self, _):
         self.set_up_menu()
         self.stop_button.set_callback(None)
         self.start_pause_button.title = self.config["start"]
