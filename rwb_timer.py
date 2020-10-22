@@ -1,4 +1,5 @@
 from typing import List
+from re import match
 import rumps
 
 
@@ -13,8 +14,9 @@ class RepeatWorkBreak(rumps.App):
             "continue": "Continue Timer",
             "stop": "Stop Timer",
             "timeout_message": "Time is up! Take a break :)",
-            "interval": 60 * 60 * 5,  # 60 seconds * 60 = 1 hour
-            'shiftSettingButtons': [
+            "shift_time_in_seconds": 60 * 60 * 5,  # 60 seconds * 60 = 1 hour
+            "break_time_in_seconds": 60 * 5,
+            'shift_setting_buttons': [
                 {
                     'title': '1 hour',
                     'duration': 60,
@@ -28,7 +30,7 @@ class RepeatWorkBreak(rumps.App):
                     'duration': 480,
                 }
             ],
-            'breakSettingButtons': [
+            'break_setting_buttons': [
                 {
                     'title': '5 minutes',
                     'duration': 60,
@@ -46,10 +48,11 @@ class RepeatWorkBreak(rumps.App):
         self.app = rumps.App(self.config['app_title'])
         self.totalShiftCount = 8
         self.progressBox = '◻︎' * self.totalShiftCount
-        self.shiftSettingButton = None
-        self.breakSettingButton = None
+        self.shift_setting_button = None
+        self.break_setting_button = None
         self.timer = rumps.Timer(self.on_tick, 1)
-        self.interval = self.config["interval"]
+        self.shift_time_in_seconds = self.config["shift_time_in_seconds"]
+        self.break_time_in_seconds = self.config["break_time_in_seconds"]
         self.start_pause_button = rumps.MenuItem(
             title=self.config["start"], callback=self.start_timer)
         self.stop_button = rumps.MenuItem(
@@ -59,8 +62,8 @@ class RepeatWorkBreak(rumps.App):
             {
                 'Preferences':
                 {
-                    "Setting Shift": self.__initializeShiftSettingButtons(),
-                    "Setting Break / hr": self.__initializeBreakSettingButtons(),
+                    "Setting Shift": self.__initialize_shift_setting_buttons(),
+                    "Setting Break / hr": self.__initialize_break_setting_buttons(),
                 }
             },
             None,
@@ -71,20 +74,20 @@ class RepeatWorkBreak(rumps.App):
     def set_up_menu(self):
         self.timer.stop()
         self.timer.count = 0
-        self.app.title = self.config['appTitle']
+        self.app.title = self.config['app_title']
 
-    def convert(self, seconds):
+    def convert_seconds_to_time_string(self, seconds) -> str:
         seconds = seconds % (24 * 3600)
-        hour = seconds // 3600
-        seconds %= 3600
-        minutes = seconds // 60
-        seconds %= 60
-        return "%d:%02d:%02d" % (hour, minutes, seconds)
+        hours, seconds = divmod(seconds, 3600)
+        minutes, seconds = divmod(seconds, 60)
+
+        return "%d:%02d:%02d" % (hours, minutes, seconds)
 
     def on_tick(self, sender):
         time_left_in_seconds = sender.end - sender.count
 
-        time_left_in_string = self.convert(time_left_in_seconds)
+        time_left_in_string = self.convert_seconds_to_time_string(
+            time_left_in_seconds)
         if sender.count != 0 and sender.count % (360) == 0:
             self.elapsedShiftCount += 1
             self.updateProgressBox()
@@ -108,7 +111,7 @@ class RepeatWorkBreak(rumps.App):
         if sender.title.lower().startswith(("start", "continue")):
             if sender.title == self.config["start"]:
                 self.timer.count = 0
-                self.timer.end = self.interval
+                self.timer.end = self.shift_time_in_seconds
             sender.title = self.config["pause"]
             self.timer.start()
         else:
@@ -120,35 +123,47 @@ class RepeatWorkBreak(rumps.App):
         self.stop_button.set_callback(None)
         self.start_pause_button.title = self.config["start"]
 
-    def __initializeShiftSettingButtons(self) -> List[rumps.MenuItem]:
-        shiftSettingButtons = [rumps.MenuItem(shiftSettingButton['title'], callback=self.toggleShiftSettingButton)
-                               for shiftSettingButton in self.config['shiftSettingButtons']]
+    def __initialize_shift_setting_buttons(self) -> List[rumps.MenuItem]:
+        shift_setting_buttons = [rumps.MenuItem(shift_setting_button['title'], callback=self.toggle_shift_setting_button)
+                                 for shift_setting_button in self.config['shift_setting_buttons']]
 
-        # Setting default shift setting button with the first MenuItem in shiftSettingButtons list
-        self.shiftSettingButton = shiftSettingButtons[0]
-        self.shiftSettingButton.state = 1
+        # Setting default shift setting button with the first MenuItem in shift_setting_buttons list
+        self.shift_setting_button = shift_setting_buttons[0]
+        self.shift_setting_button.state = 1
 
-        return shiftSettingButtons
+        return shift_setting_buttons
 
-    def __initializeBreakSettingButtons(self) -> List[rumps.MenuItem]:
-        breakSettingButtons = [rumps.MenuItem(breakSettingButton['title'], callback=self.toggleBreakSettingButton)
-                               for breakSettingButton in self.config['breakSettingButtons']]
+    def __initialize_break_setting_buttons(self) -> List[rumps.MenuItem]:
+        break_setting_buttons = [rumps.MenuItem(break_setting_button['title'], callback=self.toggle_break_setting_button)
+                                 for break_setting_button in self.config['break_setting_buttons']]
 
-        # Setting default shift setting button with the first MenuItem in breakSettingButtons list
-        self.breakSettingButton = breakSettingButtons[0]
-        self.breakSettingButton.state = 1
+        # Setting default shift setting button with the first MenuItem in break_setting_buttons list
+        self.break_setting_button = break_setting_buttons[0]
+        self.break_setting_button.state = 1
 
-        return breakSettingButtons
+        return break_setting_buttons
 
-    def toggleShiftSettingButton(self, sender):
-        self.shiftSettingButton.state = not self.shiftSettingButton.state
-        self.shiftSettingButton = sender
-        self.shiftSettingButton.state = not self.shiftSettingButton.state
+    def toggle_shift_setting_button(self, sender):
+        self.shift_setting_button.state = not self.shift_setting_button.state
+        self.shift_setting_button = sender
+        self.shift_setting_button.state = not self.shift_setting_button.state
+        hours_in_seconds = int(match(r'^\d+\s{1}', sender.title)[0]) * 3600
+        self.set_shift_time_in_seconds(hours_in_seconds)
 
-    def toggleBreakSettingButton(self, sender):
-        self.breakSettingButton.state = not self.breakSettingButton.state
-        self.breakSettingButton = sender
-        self.breakSettingButton.state = not self.breakSettingButton.state
+    def toggle_break_setting_button(self, sender):
+        self.break_setting_button.state = not self.break_setting_button.state
+        self.break_setting_button = sender
+        self.break_setting_button.state = not self.break_setting_button.state
+        hours_in_seconds = int(match(r'^\d+\s{1}', sender.title)[0]) * 60
+        self.set_break_time_in_seconds(hours_in_seconds)
+
+    def set_shift_time_in_seconds(self, hours_in_seconds: int):
+        self.shift_time_in_seconds = hours_in_seconds
+        print(self.shift_setting_button.title, self.shift_time_in_seconds)
+
+    def set_break_time_in_seconds(self, break_time_in_seconds: int):
+        self.break_time_in_seconds = break_time_in_seconds
+        print(self.break_setting_button.title, self.break_time_in_seconds)
 
     def run(self):
         self.app.run()
