@@ -1,5 +1,6 @@
 from typing import List
 from re import match
+from utility import ButtonGroup
 import rumps
 
 
@@ -14,7 +15,7 @@ class RepeatWorkBreak(rumps.App):
             "continue": "Continue Timer",
             "stop": "Stop Timer",
             "timeout_message": "Time is up! Take a break :)",
-            "shift_time_in_seconds": 60 * 60 * 5,  # 60 seconds * 60 = 1 hour
+            "shift_time_in_seconds": 60 * 60 * 1,  # 60 seconds * 60 = 1 hour
             "break_time_in_seconds": 60 * 5,
             'shift_setting_buttons': [
                 {
@@ -41,13 +42,14 @@ class RepeatWorkBreak(rumps.App):
         }
         self.app = rumps.App(self.config['app_title'])
         self.timer = rumps.Timer(self.on_tick, 1)
-
-        self.shift_setting_button = None
-        self.break_setting_button = None
+        self.shift_setting_button_group = ButtonGroup(
+            self.config['shift_setting_buttons'], callback=self.handle_shift_setting_button)
+        self.break_setting_button_group = ButtonGroup(
+            self.config['break_setting_buttons'], callback=self.handle_shift_setting_button)
         self.shift_time_in_seconds = self.config["shift_time_in_seconds"]
         self.break_time_in_seconds = self.config["break_time_in_seconds"]
         self.elapsed_shift_time_in_hours = 0
-        self.progressBox = '◻︎' * (self.shift_time_in_seconds // 3600)
+        self.progress_box = '◻︎' * (self.shift_time_in_seconds // 3600)
         self.start_pause_button = rumps.MenuItem(
             title=self.config["start"], callback=self.start_timer)
         self.stop_button = rumps.MenuItem(
@@ -56,8 +58,8 @@ class RepeatWorkBreak(rumps.App):
             {
                 'Preferences':
                 {
-                    "Setting Shift": self.__initialize_shift_setting_buttons(),
-                    "Setting Break / hr": self.__initialize_break_setting_buttons(),
+                    "Setting Shift": self.shift_setting_button_group.buttons,
+                    "Setting Break / hr": self.break_setting_button_group.buttons,
                 }
             },
             None,
@@ -82,10 +84,9 @@ class RepeatWorkBreak(rumps.App):
 
         time_left_in_string = self.convert_seconds_to_time_string(
             time_left_in_seconds)
-        if sender.count != 0 and sender.count % (360) == 0:
+        if sender.count != 0 and sender.count % 3600 == 0:
             self.elapsed_shift_time_in_hours += 1
-            self.updateProgressBox()
-
+            self.update_progress_box()
         if time_left_in_seconds == 0:
             rumps.notification(
                 title=self.config["app_title"], subtitle=self.config["timeout_message"], message='')
@@ -94,13 +95,12 @@ class RepeatWorkBreak(rumps.App):
         else:
             self.stop_button.set_callback(self.stop_timer)
 
-            self.app.title = self.progressBox + ' |  ' + time_left_in_string
+            self.app.title = self.progress_box + ' |  ' + time_left_in_string
             sender.count += 1
 
-    def updateProgressBox(self):
-        self.progressBox = self.elapsed_shift_time_in_hours * '☑︎' + \
-            (self.shift_time_in_seconds // 3600 -
-             self.elapsed_shift_time_in_hours) * '◻︎'
+    def update_progress_box(self):
+        self.progress_box = self.elapsed_shift_time_in_hours * '☑︎' + (self.shift_time_in_seconds // 3600 -
+                                                                       self.elapsed_shift_time_in_hours) * '◻︎'
 
     def start_timer(self, sender):
         if sender.title.lower().startswith(("start", "continue")):
@@ -118,47 +118,16 @@ class RepeatWorkBreak(rumps.App):
         self.stop_button.set_callback(None)
         self.start_pause_button.title = self.config["start"]
 
-    def __initialize_shift_setting_buttons(self) -> List[rumps.MenuItem]:
-        shift_setting_buttons = [rumps.MenuItem(shift_setting_button['title'], callback=self.toggle_shift_setting_button)
-                                 for shift_setting_button in self.config['shift_setting_buttons']]
+    def handle_shift_setting_button(self, sender):
+        self.shift_setting_button_group.toggle(sender)
+        selected_hours = int(match(r'^\d+\s{1}', sender.title)[0])
+        self.progress_box = "◻︎" * selected_hours  # update empty progress box
+        self.shift_time_in_seconds = selected_hours * 3600  # hours in seconds
 
-        # Setting default shift setting button with the first MenuItem in shift_setting_buttons list
-        self.shift_setting_button = shift_setting_buttons[0]
-        self.shift_setting_button.state = 1
-
-        return shift_setting_buttons
-
-    def __initialize_break_setting_buttons(self) -> List[rumps.MenuItem]:
-        break_setting_buttons = [rumps.MenuItem(break_setting_button['title'], callback=self.toggle_break_setting_button)
-                                 for break_setting_button in self.config['break_setting_buttons']]
-
-        # Setting default shift setting button with the first MenuItem in break_setting_buttons list
-        self.break_setting_button = break_setting_buttons[0]
-        self.break_setting_button.state = 1
-
-        return break_setting_buttons
-
-    def toggle_shift_setting_button(self, sender):
-        self.shift_setting_button.state = not self.shift_setting_button.state
-        self.shift_setting_button = sender
-        self.shift_setting_button.state = not self.shift_setting_button.state
-        hours_in_seconds = int(match(r'^\d+\s{1}', sender.title)[0]) * 3600
-        self.set_shift_time_in_seconds(hours_in_seconds)
-
-    def toggle_break_setting_button(self, sender):
-        self.break_setting_button.state = not self.break_setting_button.state
-        self.break_setting_button = sender
-        self.break_setting_button.state = not self.break_setting_button.state
-        hours_in_seconds = int(match(r'^\d+\s{1}', sender.title)[0]) * 60
-        self.set_break_time_in_seconds(hours_in_seconds)
-
-    def set_shift_time_in_seconds(self, hours_in_seconds: int):
-        self.shift_time_in_seconds = hours_in_seconds
-        print(self.shift_setting_button.title, self.shift_time_in_seconds)
-
-    def set_break_time_in_seconds(self, break_time_in_seconds: int):
-        self.break_time_in_seconds = break_time_in_seconds
-        print(self.break_setting_button.title, self.break_time_in_seconds)
+    def handle_break_setting_button(self, sender):
+        self.break_setting_button_group.toggle(sender)
+        selected_minutes = int(match(r'^\d+\s{1}', sender.title)[0])
+        self.break_time_in_seconds = selected_minutes * 60
 
     def run(self):
         self.app.run()
